@@ -3,7 +3,7 @@ import { db } from '../../db/index.js';
 import { leads, customers } from '../../db/schema.js';
 import { ingestLeadSchema } from '../../types/schemas.js';
 import type { IngestLeadInput } from '../../types/schemas.js';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { authenticate, verifyTenant } from '../middleware/auth.js';
 
 export async function leadRoutes(fastify: FastifyInstance) {
@@ -14,13 +14,10 @@ export async function leadRoutes(fastify: FastifyInstance) {
     schema: {
       body: ingestLeadSchema
     }
-  }, async (request: FastifyRequest<{
-    Params: { customerId: string };
-    Body: IngestLeadInput
-  }>, reply: FastifyReply) => {
+  }, async (request, reply) => {
     try {
-      const { customerId } = request.params;
-      const leadData = request.body;
+      const { customerId } = request.params as { customerId: string };
+      const leadData = request.body as IngestLeadInput;
       
       // Verify customer exists
       const [customer] = await db
@@ -112,13 +109,10 @@ export async function leadRoutes(fastify: FastifyInstance) {
   // List leads for customer
   fastify.get('/customer/:customerId', {
     preHandler: [authenticate, verifyTenant]
-  }, async (request: FastifyRequest<{
-    Params: { customerId: string };
-    Querystring: { page?: number; limit?: number; status?: string }
-  }>, reply: FastifyReply) => {
+  }, async (request, reply) => {
     try {
-      const { customerId } = request.params;
-      const { page = 1, limit = 20, status } = request.query;
+      const { customerId } = request.params as { customerId: string };
+      const { page = 1, limit = 20, status } = request.query as { page?: number; limit?: number; status?: string };
       
       // Verify customer exists
       const [customer] = await db
@@ -135,17 +129,16 @@ export async function leadRoutes(fastify: FastifyInstance) {
         return;
       }
 
-      // Build query
-      let query = db
-        .select()
-        .from(leads)
-        .where(eq(leads.customerId, customerId));
-
+      // Build query conditions
+      const conditions = [eq(leads.customerId, customerId)];
       if (status) {
-        query = query.where(eq(leads.status, status as any));
+        conditions.push(eq(leads.status, status as any));
       }
 
-      const customerLeads = await query
+      const customerLeads = await db
+        .select()
+        .from(leads)
+        .where(and(...conditions))
         .orderBy(leads.createdAt)
         .limit(limit)
         .offset((page - 1) * limit);
@@ -171,13 +164,10 @@ export async function leadRoutes(fastify: FastifyInstance) {
   // Update lead status
   fastify.patch('/:id/status', {
     preHandler: authenticate
-  }, async (request: FastifyRequest<{
-    Params: { id: string };
-    Body: { status: string }
-  }>, reply: FastifyReply) => {
+  }, async (request, reply) => {
     try {
-      const { id } = request.params;
-      const { status } = request.body;
+      const { id } = request.params as { id: string };
+      const { status } = request.body as { status: string };
 
       const [updatedLead] = await db
         .update(leads)

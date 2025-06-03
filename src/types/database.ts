@@ -1,4 +1,4 @@
-import { z } from 'zod';
+// Database types and enums
 
 // Base types
 export type UUID = string;

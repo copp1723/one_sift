@@ -1,6 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { redis } from '../../config/redis.js';
-import { env } from '../../config/env.js';
 
 export interface RateLimitConfig {
   windowMs: number;

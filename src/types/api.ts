@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { IngestionMode, LeadStatus, HandoffReason } from './database.js';
+import { IngestionMode } from './database.js';
 
 // API Request types
 export interface CreateCustomerRequest {

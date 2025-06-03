@@ -1,5 +1,5 @@
 import Mailgun from 'mailgun.js';
-import formData from 'form-data';
+import FormData from 'form-data';
 import { config } from '../config/index.js';
 import { AdfParser } from './parsers/adf-parser.js';
 import type { IngestLeadInput } from '../types/schemas.js';
@@ -10,7 +10,7 @@ export class EmailService {
   private adfParser: AdfParser;
 
   constructor() {
-    const mg = new Mailgun(formData);
+    const mg = new (Mailgun as any)(FormData);
     this.mailgun = mg.client({
       username: 'api',
       key: config.MAILGUN_API_KEY,
@@ -119,7 +119,7 @@ export class EmailService {
   /**
    * Generate handoff email content
    */
-  private generateHandoffEmail(customerName: string, dossier: HandoffDossier): { html: string; text: string } {
+  private generateHandoffEmail(_customerName: string, dossier: HandoffDossier): { html: string; text: string } {
     const lead = dossier.lead;
     const conversation = dossier.conversation;
     

@@ -2,6 +2,7 @@ import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import { config } from '../config/index.js';
+import { env } from '../config/env.js';
 import { setupRateLimiting, applyRateLimit, rateLimiters } from './middleware/rate-limit.js';
 
 export async function createServer(): Promise<FastifyInstance> {
@@ -33,7 +34,7 @@ export async function createServer(): Promise<FastifyInstance> {
   applyRateLimit(fastify, '/api/v1/conversations', rateLimiters.conversation);
 
   // Health check endpoint
-  fastify.get('/health', async (request, reply) => {
+  fastify.get('/health', async () => {
     return { 
       status: 'ok', 
       timestamp: new Date().toISOString(),
@@ -51,7 +52,7 @@ export async function createServer(): Promise<FastifyInstance> {
   // await fastify.register(webhookRoutes, { prefix: '/webhooks' });
 
   // Global error handler
-  fastify.setErrorHandler(async (error, request, reply) => {
+  fastify.setErrorHandler(async (error, _request, reply) => {
     fastify.log.error(error);
 
     // Validation errors

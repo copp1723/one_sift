@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { IngestionMode, LeadStatus, HandoffReason } from './database.js';
+import { IngestionMode, LeadStatus } from './database.js';
 
 // Request validation schemas
 export const createCustomerSchema = z.object({

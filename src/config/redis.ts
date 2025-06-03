@@ -1,9 +1,8 @@
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 import { config } from './index.js';
 
 // Main Redis connection for caching
 export const redis = new Redis(config.REDIS_URL, {
-  retryDelayOnFailover: 100,
   enableReadyCheck: false,
   maxRetriesPerRequest: null,
   lazyConnect: true,
@@ -11,7 +10,6 @@ export const redis = new Redis(config.REDIS_URL, {
 
 // Worker Redis connection (separate for BullMQ)
 export const workerRedis = new Redis(config.REDIS_URL, {
-  retryDelayOnFailover: 100,
   enableReadyCheck: false,
   maxRetriesPerRequest: null,
   lazyConnect: true,
