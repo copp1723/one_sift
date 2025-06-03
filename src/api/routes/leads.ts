@@ -4,17 +4,19 @@ import { leads, customers } from '../../db/schema.js';
 import { ingestLeadSchema } from '../../types/schemas.js';
 import type { IngestLeadInput } from '../../types/schemas.js';
 import { eq } from 'drizzle-orm';
+import { authenticate, verifyTenant } from '../middleware/auth.js';
 
 export async function leadRoutes(fastify: FastifyInstance) {
   
   // Ingest lead
   fastify.post('/ingest/:customerId', {
+    preHandler: [authenticate, verifyTenant],
     schema: {
       body: ingestLeadSchema
     }
-  }, async (request: FastifyRequest<{ 
-    Params: { customerId: string }; 
-    Body: IngestLeadInput 
+  }, async (request: FastifyRequest<{
+    Params: { customerId: string };
+    Body: IngestLeadInput
   }>, reply: FastifyReply) => {
     try {
       const { customerId } = request.params;
@@ -108,7 +110,9 @@ export async function leadRoutes(fastify: FastifyInstance) {
   });
 
   // List leads for customer
-  fastify.get('/customer/:customerId', async (request: FastifyRequest<{ 
+  fastify.get('/customer/:customerId', {
+    preHandler: [authenticate, verifyTenant]
+  }, async (request: FastifyRequest<{
     Params: { customerId: string };
     Querystring: { page?: number; limit?: number; status?: string }
   }>, reply: FastifyReply) => {
@@ -165,7 +169,9 @@ export async function leadRoutes(fastify: FastifyInstance) {
   });
 
   // Update lead status
-  fastify.patch('/:id/status', async (request: FastifyRequest<{ 
+  fastify.patch('/:id/status', {
+    preHandler: authenticate
+  }, async (request: FastifyRequest<{
     Params: { id: string };
     Body: { status: string }
   }>, reply: FastifyReply) => {
