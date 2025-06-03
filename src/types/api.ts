@@ -116,3 +116,9 @@ export interface MailgunWebhookEvent {
     };
   };
 }
+
+declare module 'fastify' {
+  interface FastifyRequest {
+    user?: { tenantId: string; [key: string]: any };
+  }
+}

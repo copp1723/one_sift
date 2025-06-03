@@ -1,5 +1,6 @@
-import { db } from '../config/database.js';
 import { sql } from 'drizzle-orm';
+import { db, withTransaction } from './index.js';
+import { schemaNameFromSlug, sanitizeSlug } from '../utils/slug.js';
 
 export interface CustomerSchemaOptions {
   customerId: string;
@@ -22,20 +23,22 @@ export interface ApiKeyResult {
  * Create a new customer schema with all required tables
  */
 export async function createCustomerSchema(options: CustomerSchemaOptions): Promise<void> {
+  const slug = sanitizeSlug(options.slug);
+  const schemaName = schemaNameFromSlug(slug);
   try {
-    await db.execute(
-      sql`SELECT system.create_customer_schema(${options.customerId}::UUID, ${options.slug})`
-    );
-    
-    // Create analytics views for the new customer
-    const schemaName = `customer_${options.slug.replace(/-/g, '_')}`;
-    await db.execute(
-      sql`SELECT system.create_customer_analytics_views(${schemaName})`
-    );
-    
+    await withTransaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT system.create_customer_schema(${options.customerId}::UUID, ${slug})`
+      );
+
+      await tx.execute(
+        sql`SELECT system.create_customer_analytics_views(${schemaName})`
+      );
+    });
+
     console.log(`✅ Created customer schema: ${schemaName}`);
   } catch (error) {
-    console.error(`❌ Failed to create customer schema for ${options.slug}:`, error);
+    console.error(`❌ Failed to create customer schema for ${slug}:`, error);
     throw error;
   }
 }
