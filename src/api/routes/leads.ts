@@ -4,13 +4,13 @@ import { leads, customers } from '../../db/schema.js';
 import { ingestLeadSchema } from '../../types/schemas.js';
 import type { IngestLeadInput } from '../../types/schemas.js';
 import { eq } from 'drizzle-orm';
-import { authenticate, verifyTenant } from '../middleware/auth.js';
+import { authenticateToken, authenticateToken as verifyTenant } from '../middleware/auth.js';
 
 export async function leadRoutes(fastify: FastifyInstance) {
   
   // Ingest lead
   fastify.post('/ingest/:customerId', {
-    preHandler: [authenticate, verifyTenant],
+    preHandler: [authenticateToken, verifyTenant],
     schema: {
       body: ingestLeadSchema
     }
@@ -111,7 +111,7 @@ export async function leadRoutes(fastify: FastifyInstance) {
 
   // List leads for customer
   fastify.get('/customer/:customerId', {
-    preHandler: [authenticate, verifyTenant]
+    preHandler: [authenticateToken, verifyTenant]
   }, async (request: FastifyRequest<{
     Params: { customerId: string };
     Querystring: { page?: number; limit?: number; status?: string }
@@ -170,7 +170,7 @@ export async function leadRoutes(fastify: FastifyInstance) {
 
   // Update lead status
   fastify.patch('/:id/status', {
-    preHandler: authenticate
+    preHandler: authenticateToken
   }, async (request: FastifyRequest<{
     Params: { id: string };
     Body: { status: string }
