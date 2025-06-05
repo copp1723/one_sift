@@ -27,6 +27,7 @@ export default {
   transform: {
     '^.+\\.ts$': ['ts-jest', {
       useESM: true,
+      isolatedModules: true,
     }],
   },
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
