@@ -3,7 +3,7 @@ import { db } from '../../db/index.js';
 import { leads, customers } from '../../db/schema.js';
 import { ingestLeadSchema } from '../../types/schemas.js';
 import type { IngestLeadInput } from '../../types/schemas.js';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { authenticateToken, authenticateToken as verifyTenant } from '../middleware/auth.js';
 
 export async function leadRoutes(fastify: FastifyInstance) {

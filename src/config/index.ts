@@ -26,5 +26,9 @@ export const config = {
   // System
   NODE_ENV: process.env.NODE_ENV || 'development',
   LOG_LEVEL: process.env.LOG_LEVEL || 'info',
-  ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000']
+  ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
+
+  // Worker Configuration
+  WORKER_HEALTH_PORT: parseInt(process.env.WORKER_HEALTH_PORT || '3001', 10),
+  WORKER_REDIS_URL: process.env.WORKER_REDIS_URL || process.env.REDIS_URL!
 };
