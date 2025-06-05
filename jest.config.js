@@ -30,6 +30,6 @@ export default {
       isolatedModules: true,
     }],
   },
-  setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
+  setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
   testTimeout: 10000,
 };

@@ -1,6 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { config } from '../../config/index.js';
-import { verifyJwt } from '../../utils/jwt.js';
+import { verifyJwt, TokenExpiredError, JsonWebTokenError, NotBeforeError } from '../../utils/jwt.js';
 import { UnauthorizedError, ForbiddenError } from '../../utils/errors.js';
 import { createLogger } from '../../utils/logger.js';
 
@@ -59,22 +59,43 @@ export async function authenticateToken(request: FastifyRequest, _reply: Fastify
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
       throw error;
     }
-    
+
     logger.debug('Token verification failed', {
       requestId: request.id,
       error: error instanceof Error ? error : new Error(String(error))
     });
-    
-    // Check for specific JWT errors
-    if (error instanceof Error) {
-      if (error.message.includes('expired')) {
-        throw new UnauthorizedError('Token has expired');
-      }
-      if (error.message.includes('invalid')) {
-        throw new UnauthorizedError('Invalid token signature');
-      }
+
+    // Handle specific jsonwebtoken errors
+    if (error instanceof TokenExpiredError) {
+      logger.debug('Token expired', {
+        requestId: request.id,
+        expiredAt: error.expiredAt
+      });
+      throw new UnauthorizedError('Token has expired');
     }
-    
+
+    if (error instanceof JsonWebTokenError) {
+      logger.debug('Invalid JWT token', {
+        requestId: request.id,
+        reason: error.message
+      });
+      throw new UnauthorizedError('Invalid token signature');
+    }
+
+    if (error instanceof NotBeforeError) {
+      logger.debug('Token not active yet', {
+        requestId: request.id,
+        notBefore: error.date
+      });
+      throw new UnauthorizedError('Token not active yet');
+    }
+
+    // Handle any other errors
+    logger.warn('Unexpected error during token verification', {
+      requestId: request.id,
+      error: error instanceof Error ? error : new Error(String(error))
+    });
+
     throw new UnauthorizedError('Invalid or expired token');
   }
 }

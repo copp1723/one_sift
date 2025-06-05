@@ -1,6 +1,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import jwt from 'jsonwebtoken';
 import { authenticateToken } from '../../../src/api/middleware/auth.js';
+import { UnauthorizedError, ForbiddenError } from '../../../src/utils/errors.js';
 
 // Mock the config
 jest.mock('../../../src/config/index.js', () => ({
@@ -17,13 +18,15 @@ describe('Auth Middleware', () => {
   beforeEach(() => {
     mockRequest = {
       headers: {},
+      id: 'test-request-id',
+      url: '/test-path'
     };
-    
+
     mockReply = {
       status: jest.fn().mockReturnThis(),
       send: jest.fn().mockReturnThis(),
     };
-    
+
     // mockNext = jest.fn(); // Not used in current auth middleware
   });
 
@@ -53,16 +56,11 @@ describe('Auth Middleware', () => {
     it('should reject request without authorization header', async () => {
       mockRequest.headers = {};
 
-      await authenticateToken(
+      await expect(authenticateToken(
         mockRequest as FastifyRequest,
         mockReply as FastifyReply
-      );
+      )).rejects.toThrow(UnauthorizedError);
 
-      expect(mockReply.status).toHaveBeenCalledWith(401);
-      expect(mockReply.send).toHaveBeenCalledWith({
-        error: 'Unauthorized',
-        message: 'Access token required'
-      });
       expect(mockRequest.user).toBeUndefined();
     });
 
@@ -71,16 +69,10 @@ describe('Auth Middleware', () => {
         authorization: 'InvalidFormat token123'
       };
 
-      await authenticateToken(
+      await expect(authenticateToken(
         mockRequest as FastifyRequest,
         mockReply as FastifyReply
-      );
-
-      expect(mockReply.status).toHaveBeenCalledWith(401);
-      expect(mockReply.send).toHaveBeenCalledWith({
-        error: 'Unauthorized',
-        message: 'Invalid token format'
-      });
+      )).rejects.toThrow(UnauthorizedError);
     });
 
     it('should reject request with invalid JWT token', async () => {
@@ -88,40 +80,27 @@ describe('Auth Middleware', () => {
         authorization: 'Bearer invalid.jwt.token'
       };
 
-      await authenticateToken(
+      await expect(authenticateToken(
         mockRequest as FastifyRequest,
         mockReply as FastifyReply
-      );
-
-      expect(mockReply.status).toHaveBeenCalledWith(401);
-      expect(mockReply.send).toHaveBeenCalledWith({
-        error: 'Unauthorized',
-        message: 'Invalid or expired token'
-      });
+      )).rejects.toThrow(UnauthorizedError);
     });
 
     it('should reject expired JWT token', async () => {
       const payload = {
         userId: 'user-123',
-        tenantId: 'tenant-456',
-        exp: Math.floor(Date.now() / 1000) - 3600 // Expired 1 hour ago
+        tenantId: 'tenant-456'
       };
-      
-      const token = jwt.sign(payload, 'test-secret-key');
+
+      const token = jwt.sign(payload, 'test-secret-key', { expiresIn: '-1h' }); // Expired 1 hour ago
       mockRequest.headers = {
         authorization: `Bearer ${token}`
       };
 
-      await authenticateToken(
+      await expect(authenticateToken(
         mockRequest as FastifyRequest,
         mockReply as FastifyReply
-      );
-
-      expect(mockReply.status).toHaveBeenCalledWith(401);
-      expect(mockReply.send).toHaveBeenCalledWith({
-        error: 'Unauthorized',
-        message: 'Invalid or expired token'
-      });
+      )).rejects.toThrow(UnauthorizedError);
     });
 
     it('should reject token signed with wrong secret', async () => {
@@ -129,22 +108,16 @@ describe('Auth Middleware', () => {
         userId: 'user-123',
         tenantId: 'tenant-456'
       };
-      
+
       const token = jwt.sign(payload, 'wrong-secret-key');
       mockRequest.headers = {
         authorization: `Bearer ${token}`
       };
 
-      await authenticateToken(
+      await expect(authenticateToken(
         mockRequest as FastifyRequest,
         mockReply as FastifyReply
-      );
-
-      expect(mockReply.status).toHaveBeenCalledWith(401);
-      expect(mockReply.send).toHaveBeenCalledWith({
-        error: 'Unauthorized',
-        message: 'Invalid or expired token'
-      });
+      )).rejects.toThrow(UnauthorizedError);
     });
 
     it('should handle missing tenantId in token', async () => {
@@ -167,6 +140,61 @@ describe('Auth Middleware', () => {
       // Should still work but user.tenantId should be undefined
       expect(mockRequest.user).toEqual(payload);
       expect((mockRequest.user as any)?.tenantId).toBeUndefined();
+    });
+
+    it('should handle TokenExpiredError specifically', async () => {
+      const payload = {
+        userId: 'user-123',
+        tenantId: 'tenant-456'
+      };
+
+      const token = jwt.sign(payload, 'test-secret-key', { expiresIn: '-1s' });
+      mockRequest.headers = {
+        authorization: `Bearer ${token}`
+      };
+
+      const error = await authenticateToken(
+        mockRequest as FastifyRequest,
+        mockReply as FastifyReply
+      ).catch(e => e);
+
+      expect(error).toBeInstanceOf(UnauthorizedError);
+      expect(error.message).toBe('Token has expired');
+    });
+
+    it('should handle JsonWebTokenError specifically', async () => {
+      mockRequest.headers = {
+        authorization: 'Bearer malformed.jwt.token'
+      };
+
+      const error = await authenticateToken(
+        mockRequest as FastifyRequest,
+        mockReply as FastifyReply
+      ).catch(e => e);
+
+      expect(error).toBeInstanceOf(UnauthorizedError);
+      expect(error.message).toBe('Invalid token signature');
+    });
+
+    it('should handle NotBeforeError specifically', async () => {
+      const payload = {
+        userId: 'user-123',
+        tenantId: 'tenant-456'
+      };
+
+      const futureTime = Math.floor(Date.now() / 1000) + 3600; // 1 hour in future
+      const token = jwt.sign(payload, 'test-secret-key', { notBefore: futureTime });
+      mockRequest.headers = {
+        authorization: `Bearer ${token}`
+      };
+
+      const error = await authenticateToken(
+        mockRequest as FastifyRequest,
+        mockReply as FastifyReply
+      ).catch(e => e);
+
+      expect(error).toBeInstanceOf(UnauthorizedError);
+      expect(error.message).toBe('Token not active yet');
     });
   });
 
@@ -204,16 +232,10 @@ describe('Auth Middleware', () => {
       };
       mockRequest.params = { customerId: 'different-tenant' };
 
-      await authenticateToken(
+      await expect(authenticateToken(
         mockRequest as FastifyRequest,
         mockReply as FastifyReply
-      );
-
-      expect(mockReply.status).toHaveBeenCalledWith(403);
-      expect(mockReply.send).toHaveBeenCalledWith({
-        error: 'Forbidden',
-        message: 'Access denied for this resource'
-      });
+      )).rejects.toThrow(ForbiddenError);
     });
   });
 });

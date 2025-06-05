@@ -1,51 +1,74 @@
-import { createHmac } from 'crypto';
+import jwt from 'jsonwebtoken';
+import type { StringValue } from 'ms';
 
-interface JwtOptions {
-  expiresIn?: string | number;
+/**
+ * JWT Utilities using the standard jsonwebtoken library
+ * Provides secure JWT signing and verification with proper error handling
+ */
+
+export interface JwtOptions {
+  expiresIn?: StringValue | number;
+  algorithm?: jwt.Algorithm;
+  issuer?: string;
+  audience?: string | string[];
 }
 
-function base64url(input: Buffer | string) {
-  return Buffer.from(input).toString('base64url');
-}
-
-function parseExpiry(val: string): number {
-  const match = val.match(/^(\d+)([smhd])$/);
-  if (!match) throw new Error('Invalid expiresIn format');
-  const num = parseInt(match[1], 10);
-  switch (match[2]) {
-    case 's': return num;
-    case 'm': return num * 60;
-    case 'h': return num * 3600;
-    case 'd': return num * 86400;
-    default: throw new Error('Invalid expiresIn unit');
-  }
-}
-
+/**
+ * Sign a JWT token using the standard jsonwebtoken library
+ * @param payload - The payload to include in the token
+ * @param secret - The secret key for signing
+ * @param options - JWT options including expiration
+ * @returns Signed JWT token
+ */
 export function signJwt(payload: Record<string, any>, secret: string, options: JwtOptions = {}): string {
-  const header = { alg: 'HS256', typ: 'JWT' };
-  const iat = Math.floor(Date.now() / 1000);
-  const fullPayload: Record<string, any> = { ...payload, iat };
-  if (options.expiresIn) {
-    const expSeconds = typeof options.expiresIn === 'string' ? parseExpiry(options.expiresIn) : options.expiresIn;
-    fullPayload.exp = iat + expSeconds;
+  const signOptions: jwt.SignOptions = {
+    algorithm: options.algorithm || 'HS256'
+  };
+
+  if (options.expiresIn !== undefined) {
+    signOptions.expiresIn = options.expiresIn;
   }
-  const headerPart = base64url(JSON.stringify(header));
-  const payloadPart = base64url(JSON.stringify(fullPayload));
-  const signature = createHmac('sha256', secret)
-    .update(`${headerPart}.${payloadPart}`)
-    .digest('base64url');
-  return `${headerPart}.${payloadPart}.${signature}`;
+  if (options.issuer) {
+    signOptions.issuer = options.issuer;
+  }
+  if (options.audience) {
+    signOptions.audience = options.audience;
+  }
+
+  return jwt.sign(payload, secret, signOptions);
 }
 
-export function verifyJwt<T = any>(token: string, secret: string): T {
-  const [headerB64, payloadB64, signature] = token.split('.');
-  const expected = createHmac('sha256', secret)
-    .update(`${headerB64}.${payloadB64}`)
-    .digest('base64url');
-  if (expected !== signature) throw new Error('Invalid signature');
-  const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString());
-  if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
-    throw new Error('Token expired');
-  }
-  return payload as T;
+/**
+ * Verify a JWT token using the standard jsonwebtoken library
+ * @param token - The JWT token to verify
+ * @param secret - The secret key for verification
+ * @param options - Verification options
+ * @returns Decoded payload
+ * @throws {jwt.TokenExpiredError} When token has expired
+ * @throws {jwt.JsonWebTokenError} When token is invalid
+ * @throws {jwt.NotBeforeError} When token is not active yet
+ */
+export function verifyJwt<T = any>(token: string, secret: string, options?: jwt.VerifyOptions): T {
+  const verifyOptions: jwt.VerifyOptions = {
+    algorithms: ['HS256'],
+    ...options
+  };
+
+  return jwt.verify(token, secret, verifyOptions) as T;
 }
+
+/**
+ * Decode a JWT token without verification (for debugging purposes only)
+ * @param token - The JWT token to decode
+ * @returns Decoded payload or null if invalid
+ */
+export function decodeJwt<T = any>(token: string): T | null {
+  return jwt.decode(token) as T | null;
+}
+
+// Re-export jsonwebtoken error types for convenience
+export const {
+  TokenExpiredError,
+  JsonWebTokenError,
+  NotBeforeError
+} = jwt;
