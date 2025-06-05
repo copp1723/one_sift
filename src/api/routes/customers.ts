@@ -5,6 +5,24 @@ import { CreateCustomerSchema, UpdateCustomerSchema } from '../../types/api.js';
 import type { CreateCustomerInput, UpdateCustomerInput } from '../../types/api.js';
 import { eq } from 'drizzle-orm';
 import { authenticate } from '../middleware/auth.js';
+import { 
+  sendSuccess, 
+  sendCreated, 
+  sendNotFound, 
+  sendConflict, 
+  sendServerError 
+} from '../../utils/response.js';
+import { 
+  createUuidParamSchema, 
+  getRouteParams, 
+  getRequestBody 
+} from '../../utils/validation.js';
+import { 
+  findById, 
+  findByField, 
+  notExists 
+} from '../../utils/database.js';
+import { asyncHandler } from '../../utils/async-handler.js';
 
 export async function customerRoutes(fastify: FastifyInstance) {
   
@@ -14,96 +32,50 @@ export async function customerRoutes(fastify: FastifyInstance) {
     schema: {
       body: CreateCustomerSchema
     }
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      const customerData = request.body as CreateCustomerInput;
-      
-      // Check if slug already exists
-      const existingCustomer = await db
-        .select()
-        .from(customers)
-        .where(eq(customers.slug, customerData.slug))
-        .limit(1);
-      
-      if (existingCustomer.length > 0) {
-        reply.status(409).send({
-          error: 'Conflict',
-          message: 'Customer with this slug already exists'
-        });
-        return;
-      }
-
-      // Generate email address for email mode
-      let emailAddress: string | undefined;
-      if (customerData.ingestionMode === 'email') {
-        emailAddress = `ai-${customerData.slug}@onesift.com`;
-      }
-
-      // Create customer
-      const [newCustomer] = await db
-        .insert(customers)
-        .values({
-          ...customerData,
-          emailAddress,
-          metadata: customerData.metadata || {}
-        })
-        .returning();
-
-      reply.status(201).send({
-        success: true,
-        data: newCustomer
-      });
-    } catch (error) {
-      fastify.log.error(error);
-      reply.status(500).send({
-        error: 'Internal Server Error',
-        message: 'Failed to create customer'
-      });
+  }, asyncHandler(async (request: FastifyRequest, reply: FastifyReply) => {
+    const customerData = getRequestBody<CreateCustomerInput>(request);
+    
+    // Check if slug already exists
+    const slugExists = !(await notExists(customers, 'slug', customerData.slug));
+    
+    if (slugExists) {
+      return sendConflict(reply, 'Customer with this slug already exists');
     }
-  });
+
+    // Generate email address for email mode
+    let emailAddress: string | undefined;
+    if (customerData.ingestionMode === 'email') {
+      emailAddress = `ai-${customerData.slug}@onesift.com`;
+    }
+
+    // Create customer
+    const [newCustomer] = await db
+      .insert(customers)
+      .values({
+        ...customerData,
+        emailAddress,
+        metadata: customerData.metadata || {}
+      })
+      .returning();
+
+    return sendCreated(reply, newCustomer, 'Customer created successfully');
+  }));
 
   // Get customer by ID
   fastify.get('/:id', { 
     preHandler: authenticate,
-    schema: {
-      params: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', format: 'uuid' }
-        },
-        required: ['id']
-      }
-    }
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      const { id } = request.params as { id: string };
-      
-      const [customer] = await db
-        .select()
-        .from(customers)
-        .where(eq(customers.id, id))
-        .limit(1);
+    schema: createUuidParamSchema('id')
+  }, asyncHandler(async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = getRouteParams(request, ['id']);
+    
+    const customer = await findById(customers, id);
 
-      if (!customer) {
-        reply.status(404).send({
-          error: 'Not Found',
-          message: 'Customer not found'
-        });
-        return;
-      }
-
-      reply.send({
-        success: true,
-        data: customer
-      });
-    } catch (error) {
-      fastify.log.error(error);
-      reply.status(500).send({
-        error: 'Internal Server Error',
-        message: 'Failed to fetch customer'
-      });
+    if (!customer) {
+      return sendNotFound(reply, 'Customer', id);
     }
-  });
+
+    return sendSuccess(reply, customer);
+  }));
 
   // Get customer by slug
   fastify.get('/slug/:slug', { 
@@ -117,103 +89,54 @@ export async function customerRoutes(fastify: FastifyInstance) {
         required: ['slug']
       }
     }
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      const { slug } = request.params as { slug: string };
-      
-      const [customer] = await db
-        .select()
-        .from(customers)
-        .where(eq(customers.slug, slug))
-        .limit(1);
+  }, asyncHandler(async (request: FastifyRequest, reply: FastifyReply) => {
+    const { slug } = getRouteParams(request, ['slug']);
+    
+    const customer = await findByField(customers, 'slug', slug);
 
-      if (!customer) {
-        reply.status(404).send({
-          error: 'Not Found',
-          message: 'Customer not found'
-        });
-        return;
-      }
-
-      reply.send({
-        success: true,
-        data: customer
-      });
-    } catch (error) {
-      fastify.log.error(error);
-      reply.status(500).send({
-        error: 'Internal Server Error',
-        message: 'Failed to fetch customer'
-      });
+    if (!customer) {
+      return sendNotFound(reply, 'Customer', `slug:${slug}`);
     }
-  });
+
+    return sendSuccess(reply, customer);
+  }));
 
   // List customers
-  fastify.get('/', { preHandler: authenticate }, async (_request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      const allCustomers = await db
-        .select()
-        .from(customers)
-        .orderBy(customers.createdAt);
+  fastify.get('/', { 
+    preHandler: authenticate 
+  }, asyncHandler(async (_request: FastifyRequest, reply: FastifyReply) => {
+    const allCustomers = await db
+      .select()
+      .from(customers)
+      .orderBy(customers.createdAt);
 
-      reply.send({
-        success: true,
-        data: allCustomers
-      });
-    } catch (error) {
-      fastify.log.error(error);
-      reply.status(500).send({
-        error: 'Internal Server Error',
-        message: 'Failed to fetch customers'
-      });
-    }
-  });
+    return sendSuccess(reply, allCustomers);
+  }));
 
   // Update customer
   fastify.patch('/:id', {
     preHandler: authenticate,
     schema: {
       body: UpdateCustomerSchema,
-      params: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', format: 'uuid' }
-        },
-        required: ['id']
-      }
+      ...createUuidParamSchema('id')
     }
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      const { id } = request.params as { id: string };
-      const updateData = request.body as UpdateCustomerInput;
+  }, asyncHandler(async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = getRouteParams(request, ['id']);
+    const updateData = getRequestBody<UpdateCustomerInput>(request);
 
-      const [updatedCustomer] = await db
-        .update(customers)
-        .set({
-          ...updateData,
-          updatedAt: new Date()
-        })
-        .where(eq(customers.id, id))
-        .returning();
+    const [updatedCustomer] = await db
+      .update(customers)
+      .set({
+        ...updateData,
+        updatedAt: new Date()
+      })
+      .where(eq(customers.id, id))
+      .returning();
 
-      if (!updatedCustomer) {
-        reply.status(404).send({
-          error: 'Not Found',
-          message: 'Customer not found'
-        });
-        return;
-      }
-
-      reply.send({
-        success: true,
-        data: updatedCustomer
-      });
-    } catch (error) {
-      fastify.log.error(error);
-      reply.status(500).send({
-        error: 'Internal Server Error',
-        message: 'Failed to update customer'
-      });
+    if (!updatedCustomer) {
+      return sendNotFound(reply, 'Customer', id);
     }
-  });
+
+    return sendSuccess(reply, updatedCustomer, 'Customer updated successfully');
+  }));
 }
