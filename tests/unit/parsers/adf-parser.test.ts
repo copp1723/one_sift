@@ -67,7 +67,7 @@ describe('AdfParser', () => {
       expect(result?.customerAddress).toBe('123 Main St');
       expect(result?.customerCity).toBe('Anytown');
       expect(result?.customerState).toBe('CA');
-      expect(result?.customerZip).toBe('12345');
+      expect(result?.customerZip).toBe(12345);
       expect(result?.deduplicationHash).toBeDefined();
       expect(result?.rawXml).toBe(validAdf);
     });

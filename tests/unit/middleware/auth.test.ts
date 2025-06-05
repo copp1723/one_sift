@@ -12,7 +12,7 @@ jest.mock('../../../src/config/index.js', () => ({
 describe('Auth Middleware', () => {
   let mockRequest: Partial<FastifyRequest>;
   let mockReply: Partial<FastifyReply>;
-  let mockNext: jest.Mock;
+  // let mockNext: jest.Mock; // Not used in current auth middleware
 
   beforeEach(() => {
     mockRequest = {
@@ -24,7 +24,7 @@ describe('Auth Middleware', () => {
       send: jest.fn().mockReturnThis(),
     };
     
-    mockNext = jest.fn();
+    // mockNext = jest.fn(); // Not used in current auth middleware
   });
 
   describe('authenticateToken', () => {
