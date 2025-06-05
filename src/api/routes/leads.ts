@@ -1,9 +1,9 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../db/index.js';
 import { leads, customers } from '../../db/schema.js';
-import { ingestLeadSchema } from '../../types/schemas.js';
-import type { IngestLeadInput } from '../../types/schemas.js';
-import { eq } from 'drizzle-orm';
+import { IngestLeadSchema, UpdateLeadStatusSchema } from '../../types/api.js';
+import type { IngestLeadInput, UpdateLeadStatusInput } from '../../types/api.js';
+import { eq, and, sql } from 'drizzle-orm';
 import { authenticate, verifyTenant } from '../middleware/auth.js';
 
 export async function leadRoutes(fastify: FastifyInstance) {
@@ -12,15 +12,19 @@ export async function leadRoutes(fastify: FastifyInstance) {
   fastify.post('/ingest/:customerId', {
     preHandler: [authenticate, verifyTenant],
     schema: {
-      body: ingestLeadSchema
+      body: IngestLeadSchema,
+      params: {
+        type: 'object',
+        properties: {
+          customerId: { type: 'string', format: 'uuid' }
+        },
+        required: ['customerId']
+      }
     }
-  }, async (request: FastifyRequest<{
-    Params: { customerId: string };
-    Body: IngestLeadInput
-  }>, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { customerId } = request.params;
-      const leadData = request.body;
+      const { customerId } = request.params as { customerId: string };
+      const leadData = request.body as IngestLeadInput;
       
       // Verify customer exists
       const [customer] = await db
@@ -55,6 +59,7 @@ export async function leadRoutes(fastify: FastifyInstance) {
           customerName: leadData.customerName,
           customerEmail: leadData.customerEmail,
           customerPhone: leadData.customerPhone,
+          message: leadData.message,
           metadata: leadData.metadata || {},
           rawData: leadData.rawData || {}
         })
@@ -78,9 +83,19 @@ export async function leadRoutes(fastify: FastifyInstance) {
   });
 
   // Get lead by ID
-  fastify.get('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+  fastify.get('/:id', {
+    schema: {
+      params: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' }
+        },
+        required: ['id']
+      }
+    }
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { id } = request.params;
+      const { id } = request.params as { id: string };
       
       const [lead] = await db
         .select()
@@ -111,14 +126,28 @@ export async function leadRoutes(fastify: FastifyInstance) {
 
   // List leads for customer
   fastify.get('/customer/:customerId', {
-    preHandler: [authenticate, verifyTenant]
-  }, async (request: FastifyRequest<{
-    Params: { customerId: string };
-    Querystring: { page?: number; limit?: number; status?: string }
-  }>, reply: FastifyReply) => {
+    preHandler: [authenticate, verifyTenant],
+    schema: {
+      params: {
+        type: 'object',
+        properties: {
+          customerId: { type: 'string', format: 'uuid' }
+        },
+        required: ['customerId']
+      },
+      querystring: {
+        type: 'object',
+        properties: {
+          page: { type: 'number' },
+          limit: { type: 'number' },
+          status: { type: 'string' }
+        }
+      }
+    }
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { customerId } = request.params;
-      const { page = 1, limit = 20, status } = request.query;
+      const { customerId } = request.params as { customerId: string };
+      const { page = 1, limit = 20, status } = request.query as { page?: number; limit?: number; status?: string };
       
       // Verify customer exists
       const [customer] = await db
@@ -135,20 +164,29 @@ export async function leadRoutes(fastify: FastifyInstance) {
         return;
       }
 
-      // Build query
-      let query = db
-        .select()
-        .from(leads)
-        .where(eq(leads.customerId, customerId));
-
+      // Build query conditions
+      const conditions = [eq(leads.customerId, customerId)];
+      
       if (status) {
-        query = query.where(eq(leads.status, status as any));
+        conditions.push(eq(leads.status, status));
       }
 
-      const customerLeads = await query
+      // Apply conditions and execute query
+      const customerLeads = await db
+        .select()
+        .from(leads)
+        .where(and(...conditions))
         .orderBy(leads.createdAt)
         .limit(limit)
         .offset((page - 1) * limit);
+
+      // Get total count for pagination
+      const [countResult] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(leads)
+        .where(and(...conditions));
+
+      const total = Number(countResult?.count || 0);
 
       reply.send({
         success: true,
@@ -156,7 +194,8 @@ export async function leadRoutes(fastify: FastifyInstance) {
         pagination: {
           page,
           limit,
-          total: customerLeads.length // TODO: Get actual count
+          total,
+          pages: Math.ceil(total / limit)
         }
       });
     } catch (error) {
@@ -170,19 +209,26 @@ export async function leadRoutes(fastify: FastifyInstance) {
 
   // Update lead status
   fastify.patch('/:id/status', {
-    preHandler: authenticate
-  }, async (request: FastifyRequest<{
-    Params: { id: string };
-    Body: { status: string }
-  }>, reply: FastifyReply) => {
+    preHandler: authenticate,
+    schema: {
+      params: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' }
+        },
+        required: ['id']
+      },
+      body: UpdateLeadStatusSchema
+    }
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { id } = request.params;
-      const { status } = request.body;
+      const { id } = request.params as { id: string };
+      const { status } = request.body as UpdateLeadStatusInput;
 
       const [updatedLead] = await db
         .update(leads)
         .set({
-          status: status as any,
+          status,
           updatedAt: new Date()
         })
         .where(eq(leads.id, id))

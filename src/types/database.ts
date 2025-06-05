@@ -1,5 +1,3 @@
-import { z } from 'zod';
-
 // Base types
 export type UUID = string;
 export type ISODateTime = string;

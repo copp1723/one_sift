@@ -1,6 +1,5 @@
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { db, client } from '../config/database.js';
-import { env } from '../config/env.js';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { fileURLToPath } from 'url';

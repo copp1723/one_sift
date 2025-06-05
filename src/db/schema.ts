@@ -181,3 +181,26 @@ export const handoffsRelations = relations(handoffs, ({ one }) => ({
     references: [customers.id]
   })
 }));
+
+// Export TypeScript enums for use in API validation
+export enum IngestionMode {
+  EMAIL = 'email',
+  API = 'api'
+}
+
+export enum LeadStatus {
+  NEW = 'new',
+  PROCESSING = 'processing',
+  RESPONDED = 'responded',
+  QUALIFIED = 'qualified',
+  HANDED_OFF = 'handed_off',
+  ERROR = 'error'
+}
+
+export enum HandoffReason {
+  MESSAGE_LIMIT = 'message_limit',
+  KEYWORD_TRIGGER = 'keyword_trigger',
+  NEGATIVE_SENTIMENT = 'negative_sentiment',
+  CUSTOMER_REQUEST = 'customer_request',
+  AI_ESCALATION = 'ai_escalation'
+}
