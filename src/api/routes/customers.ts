@@ -1,16 +1,16 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../db/index.js';
 import { customers } from '../../db/schema.js';
 import { createCustomerSchema, updateCustomerSchema } from '../../types/schemas.js';
 import type { CreateCustomerInput, UpdateCustomerInput } from '../../types/schemas.js';
 import { eq } from 'drizzle-orm';
-import { authenticate } from '../middleware/auth.js';
+import { authenticateToken } from '../middleware/auth.js';
 
 export async function customerRoutes(fastify: FastifyInstance) {
   
   // Create customer
   fastify.post('/', {
-    preHandler: authenticate,
+    preHandler: authenticateToken,
     schema: {
       body: createCustomerSchema
     }
@@ -63,7 +63,7 @@ export async function customerRoutes(fastify: FastifyInstance) {
   });
 
   // Get customer by ID
-  fastify.get('/:id', { preHandler: authenticate }, async (request, reply) => {
+  fastify.get('/:id', { preHandler: authenticateToken }, async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
       
@@ -95,7 +95,7 @@ export async function customerRoutes(fastify: FastifyInstance) {
   });
 
   // Get customer by slug
-  fastify.get('/slug/:slug', { preHandler: authenticate }, async (request, reply) => {
+  fastify.get('/slug/:slug', { preHandler: authenticateToken }, async (request: FastifyRequest<{ Params: { slug: string } }>, reply: FastifyReply) => {
     try {
       const { slug } = request.params as { slug: string };
       
@@ -127,7 +127,7 @@ export async function customerRoutes(fastify: FastifyInstance) {
   });
 
   // List customers
-  fastify.get('/', { preHandler: authenticate }, async (_request, reply) => {
+  fastify.get('/', { preHandler: authenticateToken }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const allCustomers = await db
         .select()
@@ -149,7 +149,7 @@ export async function customerRoutes(fastify: FastifyInstance) {
 
   // Update customer
   fastify.patch('/:id', {
-    preHandler: authenticate,
+    preHandler: authenticateToken,
     schema: {
       body: updateCustomerSchema
     }

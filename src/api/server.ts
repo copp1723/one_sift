@@ -4,6 +4,10 @@ import helmet from '@fastify/helmet';
 import { config } from '../config/index.js';
 import { env } from '../config/env.js';
 import { setupRateLimiting, applyRateLimit, rateLimiters } from './middleware/rate-limit.js';
+import { registerErrorHandlers } from './middleware/error-handler.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('server');
 
 export async function createServer(): Promise<FastifyInstance> {
   const fastify = Fastify({
@@ -51,44 +55,10 @@ export async function createServer(): Promise<FastifyInstance> {
   // TODO: Register webhook routes
   // await fastify.register(webhookRoutes, { prefix: '/webhooks' });
 
-  // Global error handler
-  fastify.setErrorHandler(async (error, _request, reply) => {
-    fastify.log.error(error);
+  // Register comprehensive error handlers
+  registerErrorHandlers(fastify);
 
-    // Validation errors
-    if (error.validation) {
-      reply.status(400).send({
-        error: 'Validation Error',
-        message: 'Invalid request data',
-        details: error.validation
-      });
-      return;
-    }
-
-    // Rate limiting errors
-    if (error.statusCode === 429) {
-      reply.status(429).send({
-        error: 'Too Many Requests',
-        message: error.message
-      });
-      return;
-    }
-
-    // Default error response
-    const statusCode = error.statusCode || 500;
-    reply.status(statusCode).send({
-      error: statusCode >= 500 ? 'Internal Server Error' : error.name,
-      message: statusCode >= 500 ? 'Something went wrong' : error.message
-    });
-  });
-
-  // 404 handler
-  fastify.setNotFoundHandler(async (request, reply) => {
-    reply.status(404).send({
-      error: 'Not Found',
-      message: `Route ${request.method} ${request.url} not found`
-    });
-  });
+  logger.info('Server initialized with error handlers');
 
   return fastify;
 }
@@ -98,13 +68,16 @@ export async function startServer(): Promise<void> {
     const server = await createServer();
     
     await server.listen({ 
-      port: env.PORT, 
+      port: config.PORT, 
       host: '0.0.0.0' 
     });
     
-    console.log(`🚀 Server running on port ${env.PORT}`);
+    logger.info(`Server running on port ${config.PORT}`, {
+      environment: config.NODE_ENV,
+      port: config.PORT
+    });
   } catch (error) {
-    console.error('Failed to start server:', error);
+    logger.error('Failed to start server', { error });
     process.exit(1);
   }
 }
