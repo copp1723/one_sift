@@ -28,6 +28,7 @@ export interface LogEntry {
   timestamp: string;
   level: string;
   message: string;
+  service?: string;
   context?: LogContext;
   error?: {
     message: string;
@@ -65,7 +66,8 @@ class Logger {
     const entry: LogEntry = {
       timestamp: new Date().toISOString(),
       level: level.toUpperCase(),
-      message
+      message,
+      service: this.serviceName
     };
 
     if (context) {

@@ -7,6 +7,7 @@ import { Worker } from 'bullmq';
 import { config } from '../config/index.js';
 import { createLogger } from '../utils/logger.js';
 import { createErrorFromUnknown } from '../utils/errors.js';
+import { Redis } from 'ioredis';
 
 const logger = createLogger('worker');
 
@@ -24,6 +25,9 @@ export enum JobType {
 // Main worker setup
 async function startWorkers() {
   logger.info('Starting worker processes...');
+
+  // Create Redis connection for workers
+  const redisConnection = new Redis(config.WORKER_REDIS_URL || config.REDIS_URL);
 
   // Email worker
   const emailWorker = new Worker(
@@ -48,9 +52,7 @@ async function startWorkers() {
       }
     },
     {
-      connection: {
-        url: config.WORKER_REDIS_URL || config.REDIS_URL
-      },
+      connection: redisConnection,
       concurrency: 5,
       limiter: {
         max: 10,
@@ -82,9 +84,7 @@ async function startWorkers() {
       }
     },
     {
-      connection: {
-        url: config.WORKER_REDIS_URL || config.REDIS_URL
-      },
+      connection: redisConnection,
       concurrency: 10,
       limiter: {
         max: 50,

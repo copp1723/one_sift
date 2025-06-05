@@ -47,7 +47,7 @@ export async function processLeadJob(job: Job<LeadJobData>) {
       jobId: job.id,
       leadId,
       customerId,
-      error
+      error: error instanceof Error ? error : new Error(String(error))
     });
     throw error;
   }
@@ -91,11 +91,12 @@ async function scoreLead(leadId: string) {
     
     const score = Math.floor(Math.random() * 100); // Placeholder
     
+    // Store score in metadata since there's no score field in schema
     await db
       .update(leads)
-      .set({ 
-        score,
-        scoredAt: new Date()
+      .set({
+        metadata: { score },
+        updatedAt: new Date()
       })
       .where(eq(leads.id, leadId));
     
@@ -118,11 +119,12 @@ async function assignLead(leadId: string, agentId?: string) {
       throw new Error('Automatic agent assignment not implemented');
     }
     
+    // Store assignment in metadata since there's no assignedTo field in schema
     await db
       .update(leads)
-      .set({ 
-        assignedTo: agentId,
-        assignedAt: new Date()
+      .set({
+        metadata: { assignedTo: agentId },
+        updatedAt: new Date()
       })
       .where(eq(leads.id, leadId));
     

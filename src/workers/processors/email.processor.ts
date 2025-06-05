@@ -4,11 +4,12 @@
  */
 
 import { Job } from 'bullmq';
-import { sendHandoffEmail } from '../../services/email.service.js';
+import { EmailService } from '../../services/email.service.js';
 import { createLogger } from '../../utils/logger.js';
 import { ExternalServiceError } from '../../utils/errors.js';
 
 const logger = createLogger('email-processor');
+const emailService = new EmailService();
 
 export interface EmailJobData {
   type: 'handoff' | 'notification' | 'welcome';
@@ -30,13 +31,10 @@ export async function processEmailJob(job: Job<EmailJobData>) {
   try {
     switch (type) {
       case 'handoff':
-        const success = await sendHandoffEmail(
-          data.leadId,
+        const success = await emailService.sendHandoffEmail(
+          data.customerEmail,
           data.customerName,
-          data.leadName,
-          data.leadPhone,
-          data.conversation,
-          data.handoffReason
+          data.dossier
         );
         
         if (!success) {
@@ -58,7 +56,7 @@ export async function processEmailJob(job: Job<EmailJobData>) {
     logger.error(`Failed to process ${type} email`, {
       jobId: job.id,
       customerId,
-      error
+      error: error instanceof Error ? error : new Error(String(error))
     });
     throw error;
   }

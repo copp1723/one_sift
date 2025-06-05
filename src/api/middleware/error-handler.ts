@@ -106,7 +106,7 @@ export function validationErrorHandler(
   
   if (error.validation && error.validation.length > 0) {
     const firstError = error.validation[0];
-    field = firstError.instancePath?.replace('/', '') || firstError.params?.missingProperty;
+    field = String(firstError.instancePath?.replace('/', '') || firstError.params?.missingProperty || '');
     message = firstError.message || message;
   }
 
@@ -159,7 +159,7 @@ export function registerErrorHandlers(fastify: any): void {
   });
 
   // Log server errors
-  fastify.addHook('onError', async (request: FastifyRequest, reply: FastifyReply, error: Error) => {
+  fastify.addHook('onError', async (request: FastifyRequest, _reply: FastifyReply, error: Error) => {
     logger.error('Request error hook triggered', {
       requestId: request.id,
       method: request.method,
@@ -182,7 +182,7 @@ export function registerErrorHandlers(fastify: any): void {
   });
 
   // Handle unhandled promise rejections
-  process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+  process.on('unhandledRejection', (reason: any, _promise: Promise<any>) => {
     logger.error('Unhandled promise rejection', {
       reason: reason?.message || reason,
       error: reason instanceof Error ? reason : new Error(String(reason))

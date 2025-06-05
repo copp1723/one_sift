@@ -107,12 +107,12 @@ export async function leadRoutes(fastify: FastifyInstance) {
   });
 
   // List leads for customer
-  fastify.get('/customer/:customerId', {
-    preHandler: [authenticateToken, verifyTenant]
-  }, async (request: FastifyRequest<{
+  fastify.get<{
     Params: { customerId: string };
     Querystring: { page?: number; limit?: number; status?: string }
-  }>, reply: FastifyReply) => {
+  }>('/customer/:customerId', {
+    preHandler: [authenticateToken, verifyTenant]
+  }, async (request, reply) => {
     try {
       const { customerId } = request.params as { customerId: string };
       const { page = 1, limit = 20, status } = request.query as { page?: number; limit?: number; status?: string };
@@ -165,12 +165,12 @@ export async function leadRoutes(fastify: FastifyInstance) {
   });
 
   // Update lead status
-  fastify.patch('/:id/status', {
-    preHandler: authenticateToken
-  }, async (request: FastifyRequest<{
+  fastify.patch<{
     Params: { id: string };
     Body: { status: string }
-  }>, reply: FastifyReply) => {
+  }>('/:id/status', {
+    preHandler: authenticateToken
+  }, async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
       const { status } = request.body as { status: string };

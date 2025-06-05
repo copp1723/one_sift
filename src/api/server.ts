@@ -2,7 +2,7 @@ import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import { config } from '../config/index.js';
-import { env } from '../config/env.js';
+
 import { setupRateLimiting, applyRateLimit, rateLimiters } from './middleware/rate-limit.js';
 import { registerErrorHandlers } from './middleware/error-handler.js';
 import { createLogger } from '../utils/logger.js';
@@ -77,7 +77,7 @@ export async function startServer(): Promise<void> {
       port: config.PORT
     });
   } catch (error) {
-    logger.error('Failed to start server', { error });
+    logger.error('Failed to start server', { error: error instanceof Error ? error : new Error(String(error)) });
     process.exit(1);
   }
 }

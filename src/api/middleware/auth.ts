@@ -6,7 +6,7 @@ import { createLogger } from '../../utils/logger.js';
 
 const logger = createLogger('auth-middleware');
 
-export async function authenticateToken(request: FastifyRequest, reply: FastifyReply) {
+export async function authenticateToken(request: FastifyRequest, _reply: FastifyReply) {
   const auth = request.headers['authorization'];
   
   if (!auth) {
@@ -62,7 +62,7 @@ export async function authenticateToken(request: FastifyRequest, reply: FastifyR
     
     logger.debug('Token verification failed', {
       requestId: request.id,
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error : new Error(String(error))
     });
     
     // Check for specific JWT errors

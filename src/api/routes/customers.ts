@@ -1,4 +1,4 @@
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { FastifyInstance } from 'fastify';
 import { db } from '../../db/index.js';
 import { customers } from '../../db/schema.js';
 import { createCustomerSchema, updateCustomerSchema } from '../../types/schemas.js';
@@ -63,7 +63,7 @@ export async function customerRoutes(fastify: FastifyInstance) {
   });
 
   // Get customer by ID
-  fastify.get('/:id', { preHandler: authenticateToken }, async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+  fastify.get<{ Params: { id: string } }>('/:id', { preHandler: authenticateToken }, async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
       
@@ -95,7 +95,7 @@ export async function customerRoutes(fastify: FastifyInstance) {
   });
 
   // Get customer by slug
-  fastify.get('/slug/:slug', { preHandler: authenticateToken }, async (request: FastifyRequest<{ Params: { slug: string } }>, reply: FastifyReply) => {
+  fastify.get<{ Params: { slug: string } }>('/slug/:slug', { preHandler: authenticateToken }, async (request, reply) => {
     try {
       const { slug } = request.params as { slug: string };
       
@@ -127,7 +127,7 @@ export async function customerRoutes(fastify: FastifyInstance) {
   });
 
   // List customers
-  fastify.get('/', { preHandler: authenticateToken }, async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/', { preHandler: authenticateToken }, async (_request, reply) => {
     try {
       const allCustomers = await db
         .select()
