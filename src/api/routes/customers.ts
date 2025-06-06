@@ -5,6 +5,13 @@ import { createCustomerSchema, updateCustomerSchema } from '../../types/schemas.
 import type { CreateCustomerInput, UpdateCustomerInput } from '../../types/schemas.js';
 import { eq } from 'drizzle-orm';
 import { authenticateToken } from '../middleware/auth.js';
+import {
+  sendSuccess,
+  sendCreated,
+  sendNotFound,
+  sendConflict,
+  sendInternalError
+} from '../../utils/response.js';
 
 export async function customerRoutes(fastify: FastifyInstance) {
   
@@ -17,19 +24,16 @@ export async function customerRoutes(fastify: FastifyInstance) {
   }, async (request, reply) => {
     try {
       const customerData = request.body as CreateCustomerInput;
-      
+
       // Check if slug already exists
       const existingCustomer = await db
         .select()
         .from(customers)
         .where(eq(customers.slug, customerData.slug))
         .limit(1);
-      
+
       if (existingCustomer.length > 0) {
-        reply.status(409).send({
-          error: 'Conflict',
-          message: 'Customer with this slug already exists'
-        });
+        sendConflict(reply, 'Customer with this slug already exists', request.id);
         return;
       }
 
@@ -49,16 +53,9 @@ export async function customerRoutes(fastify: FastifyInstance) {
         })
         .returning();
 
-      reply.status(201).send({
-        success: true,
-        data: newCustomer
-      });
+      sendCreated(reply, newCustomer, 'Customer created successfully');
     } catch (error) {
-      fastify.log.error(error);
-      reply.status(500).send({
-        error: 'Internal Server Error',
-        message: 'Failed to create customer'
-      });
+      sendInternalError(reply, 'Failed to create customer', request.id, error as Error);
     }
   });
 
@@ -66,7 +63,7 @@ export async function customerRoutes(fastify: FastifyInstance) {
   fastify.get<{ Params: { id: string } }>('/:id', { preHandler: authenticateToken }, async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
-      
+
       const [customer] = await db
         .select()
         .from(customers)
@@ -74,23 +71,13 @@ export async function customerRoutes(fastify: FastifyInstance) {
         .limit(1);
 
       if (!customer) {
-        reply.status(404).send({
-          error: 'Not Found',
-          message: 'Customer not found'
-        });
+        sendNotFound(reply, 'Customer', request.id);
         return;
       }
 
-      reply.send({
-        success: true,
-        data: customer
-      });
+      sendSuccess(reply, customer);
     } catch (error) {
-      fastify.log.error(error);
-      reply.status(500).send({
-        error: 'Internal Server Error',
-        message: 'Failed to fetch customer'
-      });
+      sendInternalError(reply, 'Failed to fetch customer', request.id, error as Error);
     }
   });
 
@@ -98,7 +85,7 @@ export async function customerRoutes(fastify: FastifyInstance) {
   fastify.get<{ Params: { slug: string } }>('/slug/:slug', { preHandler: authenticateToken }, async (request, reply) => {
     try {
       const { slug } = request.params as { slug: string };
-      
+
       const [customer] = await db
         .select()
         .from(customers)
@@ -106,44 +93,27 @@ export async function customerRoutes(fastify: FastifyInstance) {
         .limit(1);
 
       if (!customer) {
-        reply.status(404).send({
-          error: 'Not Found',
-          message: 'Customer not found'
-        });
+        sendNotFound(reply, 'Customer', request.id);
         return;
       }
 
-      reply.send({
-        success: true,
-        data: customer
-      });
+      sendSuccess(reply, customer);
     } catch (error) {
-      fastify.log.error(error);
-      reply.status(500).send({
-        error: 'Internal Server Error',
-        message: 'Failed to fetch customer'
-      });
+      sendInternalError(reply, 'Failed to fetch customer', request.id, error as Error);
     }
   });
 
   // List customers
-  fastify.get('/', { preHandler: authenticateToken }, async (_request, reply) => {
+  fastify.get('/', { preHandler: authenticateToken }, async (request, reply) => {
     try {
       const allCustomers = await db
         .select()
         .from(customers)
         .orderBy(customers.createdAt);
 
-      reply.send({
-        success: true,
-        data: allCustomers
-      });
+      sendSuccess(reply, allCustomers);
     } catch (error) {
-      fastify.log.error(error);
-      reply.status(500).send({
-        error: 'Internal Server Error',
-        message: 'Failed to fetch customers'
-      });
+      sendInternalError(reply, 'Failed to fetch customers', request.id, error as Error);
     }
   });
 
@@ -168,23 +138,13 @@ export async function customerRoutes(fastify: FastifyInstance) {
         .returning();
 
       if (!updatedCustomer) {
-        reply.status(404).send({
-          error: 'Not Found',
-          message: 'Customer not found'
-        });
+        sendNotFound(reply, 'Customer', request.id);
         return;
       }
 
-      reply.send({
-        success: true,
-        data: updatedCustomer
-      });
+      sendSuccess(reply, updatedCustomer, { message: 'Customer updated successfully' });
     } catch (error) {
-      fastify.log.error(error);
-      reply.status(500).send({
-        error: 'Internal Server Error',
-        message: 'Failed to update customer'
-      });
+      sendInternalError(reply, 'Failed to update customer', request.id, error as Error);
     }
   });
 }
