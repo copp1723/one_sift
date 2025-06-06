@@ -1,5 +1,6 @@
-export default {
-  preset: 'ts-jest',
+/** @type {import('jest').Config} */
+const config = {
+  preset: 'ts-jest/presets/default-esm',
   testEnvironment: 'node',
   roots: ['<rootDir>/src', '<rootDir>/tests'],
   testMatch: ['**/__tests__/**/*.test.ts', '**/?(*.)+(spec|test).ts'],
@@ -24,12 +25,18 @@ export default {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   extensionsToTreatAsEsm: ['.ts'],
+  globals: {
+    'ts-jest': {
+      useESM: true,
+    },
+  },
   transform: {
     '^.+\\.ts$': ['ts-jest', {
       useESM: true,
-      isolatedModules: true,
     }],
   },
-  setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
+  setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
   testTimeout: 10000,
 };
+
+export default config;
