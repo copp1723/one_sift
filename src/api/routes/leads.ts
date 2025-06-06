@@ -1,10 +1,23 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { db } from '../../db/index.js';
 import { leads, customers } from '../../db/schema.js';
 import { ingestLeadSchema } from '../../types/schemas.js';
 import type { IngestLeadInput } from '../../types/schemas.js';
 import { eq, and } from 'drizzle-orm';
 import { authenticateToken, authenticateToken as verifyTenant } from '../middleware/auth.js';
+import {
+  sendSuccess,
+  sendCreated,
+  sendNotFound,
+  sendInternalError,
+  sendPaginated,
+  calculatePagination
+} from '../../utils/response.js';
+import {
+  findById,
+  createWithConflictCheck,
+  updateById,
+  findPaginated
+} from '../../utils/database.js';
 
 export async function leadRoutes(fastify: FastifyInstance) {
   
@@ -18,19 +31,11 @@ export async function leadRoutes(fastify: FastifyInstance) {
     try {
       const { customerId } = request.params as { customerId: string };
       const leadData = request.body as IngestLeadInput;
-      
-      // Verify customer exists
-      const [customer] = await db
-        .select()
-        .from(customers)
-        .where(eq(customers.id, customerId))
-        .limit(1);
-      
+
+      // Verify customer exists and is active
+      const customer = await findById<{ id: string; isActive: boolean }>(customers, customerId);
       if (!customer) {
-        reply.status(404).send({
-          error: 'Not Found',
-          message: 'Customer not found'
-        });
+        sendNotFound(reply, 'Customer', request.id);
         return;
       }
 
@@ -43,34 +48,28 @@ export async function leadRoutes(fastify: FastifyInstance) {
       }
 
       // Create lead
-      const [newLead] = await db
-        .insert(leads)
-        .values({
-          customerId,
-          externalId: leadData.externalId,
-          source: leadData.source,
-          customerName: leadData.customerName,
-          customerEmail: leadData.customerEmail,
-          customerPhone: leadData.customerPhone,
-          metadata: leadData.metadata || {},
-          rawData: leadData.rawData || {}
-        })
-        .returning();
+      const result = await createWithConflictCheck(leads, {
+        customerId,
+        externalId: leadData.externalId,
+        source: leadData.source,
+        customerName: leadData.customerName,
+        customerEmail: leadData.customerEmail,
+        customerPhone: leadData.customerPhone,
+        metadata: leadData.metadata || {},
+        rawData: leadData.rawData || {}
+      });
+
+      if (!result.success) {
+        sendInternalError(reply, 'Failed to ingest lead', request.id, new Error(result.error!));
+        return;
+      }
 
       // TODO: Queue for AI processing
-      // await queueLeadForProcessing(newLead.id);
+      // await queueLeadForProcessing(result.data!.id);
 
-      reply.status(201).send({
-        success: true,
-        data: newLead,
-        message: 'Lead ingested successfully'
-      });
+      sendCreated(reply, result.data!, 'Lead ingested successfully');
     } catch (error) {
-      fastify.log.error(error);
-      reply.status(500).send({
-        error: 'Internal Server Error',
-        message: 'Failed to ingest lead'
-      });
+      sendInternalError(reply, 'Failed to ingest lead', request.id, error as Error);
     }
   });
 
@@ -78,31 +77,16 @@ export async function leadRoutes(fastify: FastifyInstance) {
   fastify.get('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     try {
       const { id } = request.params;
-      
-      const [lead] = await db
-        .select()
-        .from(leads)
-        .where(eq(leads.id, id))
-        .limit(1);
 
+      const lead = await findById(leads, id);
       if (!lead) {
-        reply.status(404).send({
-          error: 'Not Found',
-          message: 'Lead not found'
-        });
+        sendNotFound(reply, 'Lead', request.id);
         return;
       }
 
-      reply.send({
-        success: true,
-        data: lead
-      });
+      sendSuccess(reply, lead);
     } catch (error) {
-      fastify.log.error(error);
-      reply.status(500).send({
-        error: 'Internal Server Error',
-        message: 'Failed to fetch lead'
-      });
+      sendInternalError(reply, 'Failed to fetch lead', request.id, error as Error);
     }
   });
 
@@ -116,19 +100,11 @@ export async function leadRoutes(fastify: FastifyInstance) {
     try {
       const { customerId } = request.params as { customerId: string };
       const { page = 1, limit = 20, status } = request.query as { page?: number; limit?: number; status?: string };
-      
+
       // Verify customer exists
-      const [customer] = await db
-        .select()
-        .from(customers)
-        .where(eq(customers.id, customerId))
-        .limit(1);
-      
+      const customer = await findById(customers, customerId);
       if (!customer) {
-        reply.status(404).send({
-          error: 'Not Found',
-          message: 'Customer not found'
-        });
+        sendNotFound(reply, 'Customer', request.id);
         return;
       }
 
@@ -138,29 +114,18 @@ export async function leadRoutes(fastify: FastifyInstance) {
         conditions.push(eq(leads.status, status as any));
       }
 
-      const customerLeads = await db
-        .select()
-        .from(leads)
-        .where(and(...conditions))
-        .orderBy(leads.createdAt)
-        .limit(limit)
-        .offset((page - 1) * limit);
+      const customerLeads = await findPaginated(
+        leads,
+        page,
+        limit,
+        and(...conditions),
+        leads.createdAt
+      );
 
-      reply.send({
-        success: true,
-        data: customerLeads,
-        pagination: {
-          page,
-          limit,
-          total: customerLeads.length // TODO: Get actual count
-        }
-      });
+      const pagination = calculatePagination(page, limit, customerLeads.length);
+      sendPaginated(reply, customerLeads, pagination);
     } catch (error) {
-      fastify.log.error(error);
-      reply.status(500).send({
-        error: 'Internal Server Error',
-        message: 'Failed to fetch leads'
-      });
+      sendInternalError(reply, 'Failed to fetch leads', request.id, error as Error);
     }
   });
 
@@ -175,33 +140,18 @@ export async function leadRoutes(fastify: FastifyInstance) {
       const { id } = request.params as { id: string };
       const { status } = request.body as { status: string };
 
-      const [updatedLead] = await db
-        .update(leads)
-        .set({
-          status: status as any,
-          updatedAt: new Date()
-        })
-        .where(eq(leads.id, id))
-        .returning();
+      const result = await updateById(leads, id, {
+        status: status as any
+      });
 
-      if (!updatedLead) {
-        reply.status(404).send({
-          error: 'Not Found',
-          message: 'Lead not found'
-        });
+      if (!result.success) {
+        sendNotFound(reply, 'Lead', request.id);
         return;
       }
 
-      reply.send({
-        success: true,
-        data: updatedLead
-      });
+      sendSuccess(reply, result.data!);
     } catch (error) {
-      fastify.log.error(error);
-      reply.status(500).send({
-        error: 'Internal Server Error',
-        message: 'Failed to update lead'
-      });
+      sendInternalError(reply, 'Failed to update lead', request.id, error as Error);
     }
   });
 }
